@@ -12,7 +12,7 @@ enum RPS {
     Scissors,
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Clone, Copy)]
 enum GameResult {
     Win,
     Draw,
@@ -62,6 +62,14 @@ impl RPS {
             Ordering::Greater => Win,
         }
     }
+
+    fn score(&self) -> u32 {
+        match *self {
+            Rock => 1,
+            Paper => 2,
+            Scissors => 3,
+        }
+    }
 }
 
 fn parse_opponent(c: char) -> RPS {
@@ -82,22 +90,48 @@ fn parse_response(c: char) -> RPS {
     }
 }
 
+fn parse_desired_outcome(c: char) -> GameResult {
+    match c {
+        'X' => Loss,
+        'Y' => Draw,
+        'Z' => Win,
+        _ => panic!("unexpected char"),
+    }
+}
+
+fn parse_line_chars(line: &str) -> (char, char) {
+    let mut split = line.split(' ').map(|s| s.chars().next().unwrap());
+    (split.next().unwrap(), split.next().unwrap())
+}
+
 fn parse_round(input: &str) -> (RPS, RPS) {
-    let mut split = input.split(' ').map(|s| s.chars().next().unwrap());
-    let (a, b) = (split.next().unwrap(), split.next().unwrap());
+    let (a, b) = parse_line_chars(input);
     (parse_opponent(a), parse_response(b))
 }
 
+fn parse_round_part2(input: &str) -> (RPS, GameResult) {
+    let (a, b) = parse_line_chars(input);
+    (parse_opponent(a), parse_desired_outcome(b))
+}
+
 fn calculate_round_score(opponent: RPS, response: RPS) -> u32 {
-    let shape_score = match response {
-        Rock => 1,
-        Paper => 2,
-        Scissors => 3,
-    };
+    let shape_score = response.score();
     let outcome = response.fight(opponent);
     let outcome_score = outcome.score();
-
     shape_score + outcome_score
+}
+
+fn get_response_for_desired_outcome(opponent: RPS, desired_outcome: GameResult) -> RPS {
+    [Rock, Paper, Scissors]
+        .into_iter()
+        .find(|rps| rps.fight(opponent) == desired_outcome)
+        .unwrap()
+}
+
+fn calculate_round_score_part2(opponent: RPS, desired_outcome: GameResult) -> u32 {
+    let response = get_response_for_desired_outcome(opponent, desired_outcome);
+    let shape_score = response.score();
+    shape_score + desired_outcome.score()
 }
 
 fn day2(reader: BufReader<File>) -> u32 {
@@ -108,6 +142,14 @@ fn day2(reader: BufReader<File>) -> u32 {
         .sum()
 }
 
+fn day2_part2(reader: BufReader<File>) -> u32 {
+    reader
+        .lines()
+        .map(|line| parse_round_part2(&line.unwrap()))
+        .map(|(opponent, desired_outcome)| calculate_round_score_part2(opponent, desired_outcome))
+        .sum()
+}
+
 #[cfg(test)]
 mod tests {
     use std::{fs::File, io::BufReader};
@@ -115,36 +157,55 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_parse_round() {
+    fn parse_round_test() {
         let input = "A Y";
         assert_eq!(parse_round(input), (Rock, Paper));
     }
 
     #[test]
-    fn test_ord() {
+    fn parse_round_part2_test() {
+        let input = "A Y";
+        assert_eq!(parse_round_part2(input), (Rock, Draw));
+    }
+
+    #[test]
+    fn ord_test() {
         assert!(Rock > Scissors);
         assert!(Scissors > Paper);
         assert!(Paper > Rock);
     }
 
     #[test]
-    fn test_fight() {
+    fn fight_test() {
         assert_eq!(Rock.fight(Scissors), Win);
         assert_eq!(Scissors.fight(Rock), Loss);
         assert_eq!(Paper.fight(Rock), Win);
     }
 
     #[test]
-    fn test_calculate_round_score() {
+    fn calculate_round_score_test() {
         assert_eq!(calculate_round_score(Rock, Paper), 8);
         assert_eq!(calculate_round_score(Paper, Rock), 1);
         assert_eq!(calculate_round_score(Scissors, Scissors), 6);
     }
 
     #[test]
-    fn test_day2() {
+    fn get_response_for_desired_outcome_test() {
+        assert_eq!(get_response_for_desired_outcome(Rock, Draw), Rock);
+        assert_eq!(get_response_for_desired_outcome(Paper, Loss), Rock);
+    }
+
+    #[test]
+    fn day2_test() {
         let input = File::open("./testdata/day2").unwrap();
         let reader = BufReader::new(input);
         assert_eq!(day2(reader), 10718);
+    }
+
+    #[test]
+    fn day2_part2_test() {
+        let input = File::open("./testdata/day2").unwrap();
+        let reader = BufReader::new(input);
+        assert_eq!(day2_part2(reader), 14652);
     }
 }

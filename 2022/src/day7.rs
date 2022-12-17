@@ -1,5 +1,10 @@
-use eyre::Result;
-use std::{collections::HashMap, io::prelude::*, io::BufReader};
+use std::{
+    collections::HashMap,
+    io::prelude::*,
+    io::{BufReader, Lines},
+};
+
+use itertools::Itertools;
 
 #[derive(Debug, Clone)]
 enum Tree {
@@ -65,6 +70,39 @@ impl Tree {
     }
 }
 
+impl<T: std::io::BufRead> From<Lines<T>> for Tree {
+    fn from(lines: Lines<T>) -> Tree {
+        let mut current_path: Vec<String> = vec![];
+        let mut tree = Tree::new_dir();
+        for line in lines {
+            match parse_line(line.unwrap()) {
+                ParsedLine::Command(cmd, arg) => match (cmd.as_ref(), arg.as_deref()) {
+                    ("cd", Some("/")) => continue,
+                    ("cd", Some(path)) => {
+                        println!("cding to {path:?}");
+                        match path {
+                            ".." => {
+                                current_path.pop();
+                            }
+                            _ => {
+                                current_path.push(path.to_string());
+                            }
+                        }
+                    }
+                    ("ls", _) => println!("listing files"),
+                    (_, _) => panic!("unexpected command"),
+                },
+                ParsedLine::LsOutput(ls_output) => {
+                    println!("got file {ls_output:?}");
+                    tree.add(&current_path, ls_output);
+                }
+            }
+        }
+
+        tree
+    }
+}
+
 #[derive(Debug, PartialEq)]
 enum LsOutput {
     File(String, u32),
@@ -77,47 +115,40 @@ enum ParsedLine {
     LsOutput(LsOutput),
 }
 
-fn day7<T>(reader: BufReader<T>) -> Result<u32>
+fn day7<T>(reader: BufReader<T>) -> u32
 where
     T: std::io::Read,
 {
-    let mut current_path: Vec<String> = vec![];
-    let mut tree = Tree::new_dir();
-    for line in reader.lines() {
-        match parse_line(line?) {
-            ParsedLine::Command(cmd, arg) => match (cmd.as_ref(), arg.as_deref()) {
-                ("cd", Some("/")) => continue,
-                ("cd", Some(path)) => {
-                    println!("cding to {path:?}");
-                    match path {
-                        ".." => {
-                            current_path.pop();
-                        }
-                        _ => {
-                            current_path.push(path.to_string());
-                        }
-                    }
-                }
-                ("ls", _) => println!("listing files"),
-                (_, _) => panic!("unexpected command"),
-            },
-            ParsedLine::LsOutput(ls_output) => {
-                println!("got file {ls_output:?}");
-                tree.add(&current_path, ls_output);
-            }
-        }
-    }
-
-    let sum = tree
-        .get_directories()
+    let tree = Tree::from(reader.lines());
+    tree.get_directories()
         .iter()
         .filter_map(|dir| match dir.get_size() {
             size if size <= 100_000 => Some(size),
             _ => None,
         })
-        .sum();
+        .sum()
+}
 
-    Ok(sum)
+const TOTAL_SPACE: u32 = 70_000_000;
+const REQUIRED_SPACE: u32 = 30_000_000;
+
+fn day7_part2<T>(reader: BufReader<T>) -> u32
+where
+    T: std::io::Read,
+{
+    let tree = Tree::from(reader.lines());
+    let unused_space = TOTAL_SPACE - tree.get_size();
+    let directories = tree.get_directories();
+
+    directories
+        .iter()
+        .filter_map(|dir| match dir.get_size() {
+            size if unused_space + size >= REQUIRED_SPACE => Some(size),
+            _ => None,
+        })
+        .sorted()
+        .next()
+        .unwrap()
 }
 
 fn parse_line(line: String) -> ParsedLine {
@@ -180,14 +211,21 @@ $ ls
 
         let cursor = Cursor::new(input.trim_start_matches('\n'));
         let reader = BufReader::new(cursor);
-        assert_eq!(day7(reader).unwrap(), 95437);
+        assert_eq!(day7(reader), 95437);
     }
 
     #[test]
     fn test_day7() {
         let input = File::open("./testdata/day7").unwrap();
         let reader = BufReader::new(input);
-        assert_eq!(day7(reader).unwrap(), 1770595);
+        assert_eq!(day7(reader), 1770595);
+    }
+
+    #[test]
+    fn test_day7_part2() {
+        let input = File::open("./testdata/day7").unwrap();
+        let reader = BufReader::new(input);
+        assert_eq!(day7_part2(reader), 2195372);
     }
 
     #[test]

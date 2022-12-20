@@ -1,6 +1,9 @@
-use std::io::{BufRead, BufReader};
+use std::{
+    collections::HashSet,
+    io::{BufRead, BufReader},
+};
 
-#[derive(Debug, Default, PartialEq, Clone)]
+#[derive(Debug, Default, Hash, Eq, PartialEq, Clone)]
 struct Point {
     x: i32,
     y: i32,
@@ -8,59 +11,67 @@ struct Point {
 
 #[derive(Debug)]
 struct Grid {
-    head_position: Point,
-    tail_position: Point,
-    tail_visited_positions: Vec<Point>,
+    knots: Vec<Point>,
+    tail_visited_positions: HashSet<Point>,
 }
 
 impl Grid {
-    fn new() -> Self {
+    fn new(knots_count: usize) -> Self {
         Grid {
-            head_position: Point::default(),
-            tail_position: Point::default(),
-            tail_visited_positions: vec![Point::default()],
+            knots: vec![Point::default(); knots_count],
+            tail_visited_positions: HashSet::new(),
         }
     }
 
-    fn move_head(&mut self, motion: Motion) {
-        for _ in 0..motion.steps {
-            match motion.direction {
-                Direction::Up => self.head_position.y += 1,
-                Direction::Down => self.head_position.y -= 1,
-                Direction::Left => self.head_position.x -= 1,
-                Direction::Right => self.head_position.x += 1,
-            };
+    fn move_head(&mut self, motion: &Motion) {
+        let head = self.knots.first_mut().unwrap();
 
-            let dx = self.head_position.x.abs_diff(self.tail_position.x);
-            let dy = self.head_position.y.abs_diff(self.tail_position.y);
+        match motion.direction {
+            Direction::Up => head.y += 1,
+            Direction::Down => head.y -= 1,
+            Direction::Left => head.x -= 1,
+            Direction::Right => head.x += 1,
+        };
+    }
 
-            // Tail needs to move
-            if dx > 1 || dy > 1 {
-                if self.head_position.x > self.tail_position.x {
-                    self.tail_position.x += 1
-                }
+    fn move_knot_if_needed(&mut self, n: usize) {
+        let head = self.knots.get(n - 1).unwrap().clone();
+        let tail = self.knots.get_mut(n).unwrap();
 
-                if self.head_position.y > self.tail_position.y {
-                    self.tail_position.y += 1
-                }
+        let dx = head.x.abs_diff(tail.x);
+        let dy = head.y.abs_diff(tail.y);
 
-                if self.head_position.x < self.tail_position.x {
-                    self.tail_position.x -= 1
-                }
-
-                if self.head_position.y < self.tail_position.y {
-                    self.tail_position.y -= 1
-                }
-
-                if !self.tail_visited_positions.contains(&self.tail_position) {
-                    self.tail_visited_positions.push(self.tail_position.clone());
-                }
+        // Tail needs to move
+        if dx > 1 || dy > 1 {
+            if head.x > tail.x {
+                tail.x += 1
             }
 
-            println!(
-                "moved head {:?} to {:?} | tail: {:?}",
-                motion.direction, self.head_position, self.tail_position
-            );
+            if head.y > tail.y {
+                tail.y += 1
+            }
+
+            if head.x < tail.x {
+                tail.x -= 1
+            }
+
+            if head.y < tail.y {
+                tail.y -= 1
+            }
+        }
+    }
+
+    fn apply_motion(&mut self, motion: Motion) {
+        for _ in 0..motion.steps {
+            self.move_head(&motion);
+            println!("moved head {:?} to {:?}", motion.direction, self.knots[0]);
+
+            for idx in 1..self.knots.len() {
+                self.move_knot_if_needed(idx);
+            }
+
+            let tail = self.knots.last().unwrap();
+            self.tail_visited_positions.insert(tail.clone());
         }
     }
 }
@@ -101,15 +112,15 @@ fn parse_move(input: &str) -> Motion {
     }
 }
 
-fn day9<T>(reader: BufReader<T>) -> usize
+fn day9<T>(reader: BufReader<T>, knots: usize) -> usize
 where
     T: std::io::Read,
 {
-    let mut grid = Grid::new();
+    let mut grid = Grid::new(knots);
 
     for line in reader.lines() {
         let m = parse_move(&line.unwrap());
-        grid.move_head(m);
+        grid.apply_motion(m);
     }
 
     grid.tail_visited_positions.len()
@@ -128,7 +139,7 @@ mod tests {
     fn day9_test_simple() {
         let input = "
 R 4
-R 4
+U 4
 L 3
 D 1
 R 4
@@ -137,14 +148,53 @@ L 5
 R 2";
         let cursor = Cursor::new(input.trim_start_matches('\n'));
         let reader = BufReader::new(cursor);
-        assert_eq!(day9(reader), 13);
+        assert_eq!(day9(reader, 2), 13);
     }
 
     #[test]
     fn day9_test() {
         let input = File::open("./testdata/day9").unwrap();
         let reader = BufReader::new(input);
-        assert_eq!(day9(reader), 6256);
+        assert_eq!(day9(reader, 2), 6256);
+    }
+
+    #[test]
+    fn day9_part2_test_simple() {
+        let input = "
+R 4
+U 4
+L 3
+D 1
+R 4
+D 1
+L 5
+R 2";
+        let cursor = Cursor::new(input.trim_start_matches('\n'));
+        let reader = BufReader::new(cursor);
+        assert_eq!(day9(reader, 9), 1);
+    }
+
+    #[test]
+    fn day9_part2_less_simple() {
+        let input = "
+R 5
+U 8
+L 8
+D 3
+R 17
+D 10
+L 25
+U 20";
+        let cursor = Cursor::new(input.trim_start_matches('\n'));
+        let reader = BufReader::new(cursor);
+        assert_eq!(day9(reader, 10), 36);
+    }
+
+    #[test]
+    fn day9_part2_test() {
+        let input = File::open("./testdata/day9").unwrap();
+        let reader = BufReader::new(input);
+        assert_eq!(day9(reader, 10), 2665);
     }
 
     #[test]

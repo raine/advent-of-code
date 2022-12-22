@@ -33,6 +33,47 @@ where
         .sum()
 }
 
+fn day10_part2<T>(reader: BufReader<T>) -> String
+where
+    T: std::io::Read,
+{
+    let mut x = 1;
+    let mut output = String::new();
+    let mut cycle_n = 0;
+    let mut crt_row_pos = 0;
+    let mut start_cycle = |x: i32| {
+        let sprite_pos = x - 1..=x + 1;
+        if sprite_pos.contains(&crt_row_pos) {
+            output.push('#');
+        } else {
+            output.push('.');
+        };
+
+        cycle_n += 1;
+
+        if crt_row_pos == 39 {
+            output.push('\n');
+            crt_row_pos = 0;
+        } else {
+            crt_row_pos += 1;
+        }
+    };
+    for line in reader.lines() {
+        match parse_instruction(&line.unwrap()) {
+            Instruction::Noop => {
+                start_cycle(x);
+            }
+            Instruction::Addx(v) => {
+                start_cycle(x);
+                start_cycle(x);
+                x += v;
+            }
+        }
+    }
+
+    output
+}
+
 #[derive(Debug)]
 enum Instruction {
     Noop,
@@ -71,5 +112,41 @@ mod tests {
         let input = File::open("./testdata/day10").unwrap();
         let reader = BufReader::new(input);
         assert_eq!(day10(reader), 12540);
+    }
+
+    #[test]
+    fn day10_part2_test_less_simple() {
+        let input = File::open("./testdata/day10_less_simple").unwrap();
+        let reader = BufReader::new(input);
+        assert_eq!(
+            day10_part2(reader),
+            "
+##..##..##..##..##..##..##..##..##..##..
+###...###...###...###...###...###...###.
+####....####....####....####....####....
+#####.....#####.....#####.....#####.....
+######......######......######......####
+#######.......#######.......#######.....
+"
+            .trim_start_matches('\n')
+        );
+    }
+
+    #[test]
+    fn day10_part2_test() {
+        let input = File::open("./testdata/day10").unwrap();
+        let reader = BufReader::new(input);
+        assert_eq!(
+            day10_part2(reader),
+            "
+####.####..##..####.####.#....#..#.####.
+#....#....#..#....#.#....#....#..#.#....
+###..###..#......#..###..#....####.###..
+#....#....#.....#...#....#....#..#.#....
+#....#....#..#.#....#....#....#..#.#....
+#....####..##..####.####.####.#..#.####.
+"
+            .trim_start_matches('\n')
+        );
     }
 }

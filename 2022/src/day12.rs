@@ -1,6 +1,7 @@
 use std::char;
 use std::collections::{HashMap, HashSet, VecDeque};
-use std::str::FromStr;
+
+use itertools::Itertools;
 
 #[derive(Debug)]
 struct Heightmap {
@@ -74,28 +75,24 @@ impl Heightmap {
 
         list
     }
-}
 
-impl FromStr for Heightmap {
-    type Err = ();
-
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
-        let lines = s.lines();
+    fn parse(input: &str) -> Heightmap {
+        let lines = input.lines();
         let height = lines.clone().count();
         let width = lines.clone().next().unwrap().len();
         let cells = lines
-            .flat_map(|l| l.chars().map(parse_cell).collect::<Vec<Cell>>())
+            .flat_map(|l| l.chars().map(parse_cell).collect::<Vec<_>>())
             .collect();
 
-        Ok(Heightmap {
+        Heightmap {
             cells,
             height,
             width,
-        })
+        }
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 enum Cell {
     Start,
     End,
@@ -119,11 +116,12 @@ fn parse_cell(c: char) -> Cell {
     match c {
         'S' => Cell::Start,
         'E' => Cell::End,
-        c => Cell::Square((c as u8) - b'a'),
+        'a'..='z' => Cell::Square(c as u8 - b'a'),
+        _ => panic!("invalid character: {c}"),
     }
 }
 
-fn bfs(graph: HashMap<usize, Vec<usize>>, start: usize, end: usize) -> Option<Vec<usize>> {
+fn bfs(graph: &HashMap<usize, Vec<usize>>, start: usize, end: usize) -> Option<Vec<usize>> {
     let mut queue = VecDeque::new();
     queue.push_back(start);
 
@@ -162,12 +160,31 @@ fn bfs(graph: HashMap<usize, Vec<usize>>, start: usize, end: usize) -> Option<Ve
 }
 
 fn day12(input: &str) -> usize {
-    let map: Heightmap = input.trim_start_matches('\n').parse().unwrap();
+    let map = Heightmap::parse(input.trim_start_matches('\n'));
     let adjacency_list = map.to_adjacency_list();
     let start = map.get_start_idx();
     let end = map.get_end_idx();
-    let path = bfs(adjacency_list, start, end);
+    let path = bfs(&adjacency_list, start, end);
     path.unwrap().len() - 1
+}
+
+fn day12_part2(input: &str) -> usize {
+    let map = Heightmap::parse(input.trim_start_matches('\n'));
+    let adjacency_list = map.to_adjacency_list();
+    let end = map.get_end_idx();
+    let potential_start_cells = map
+        .cells
+        .iter()
+        .enumerate()
+        .filter(|(_idx, c)| c.elevation() == MIN_ELEVATION);
+
+    potential_start_cells
+        .filter_map(|(idx, _c)| bfs(&adjacency_list, idx, end))
+        .map(|path| path.len())
+        .sorted()
+        .next()
+        .unwrap()
+        - 1
 }
 
 #[cfg(test)]
@@ -191,5 +208,24 @@ abdefghi
     fn day12_test() {
         let input = include_str!("../testdata/day12");
         assert_eq!(day12(input), 361);
+    }
+
+    #[test]
+    fn day12_part2_simple_test() {
+        let input = "
+Sabqponm
+abcryxxl
+accszExk
+acctuvwj
+abdefghi
+";
+
+        assert_eq!(day12_part2(input), 29);
+    }
+
+    #[test]
+    fn day12_part2_test() {
+        let input = include_str!("../testdata/day12");
+        assert_eq!(day12_part2(input), 354);
     }
 }

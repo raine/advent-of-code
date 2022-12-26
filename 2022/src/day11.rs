@@ -26,7 +26,7 @@ struct Monkey {
 #[derive(Debug)]
 struct KeepAway {
     monkeys: Vec<Monkey>,
-    monkey_inspects: HashMap<usize, u32>,
+    monkey_inspects: HashMap<usize, u64>,
     rounds: u32,
 }
 
@@ -82,16 +82,12 @@ impl KeepAway {
             self.play_round();
         }
 
-        let (a, b) = self
-            .monkey_inspects
+        self.monkey_inspects
             .values()
             .sorted()
             .rev()
             .take(2)
-            .collect_tuple()
-            .unwrap();
-
-        *a as u64 * *b as u64
+            .product()
     }
 }
 

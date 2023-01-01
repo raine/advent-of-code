@@ -27,10 +27,11 @@ pub struct Grid {
     data: HashMap<Coord, Cell>,
     dropping_sand: Option<Coord>,
     bounds: (Coord, Coord),
+    floor: bool,
 }
 
 impl Grid {
-    pub fn from_rock_paths(input: &str) -> Grid {
+    pub fn from_rock_paths(input: &str, floor: bool) -> Grid {
         let mut data = HashMap::new();
         let rock_paths = all_consuming(parse_all_paths)(input.trim_end())
             .finish()
@@ -46,6 +47,7 @@ impl Grid {
             data,
             dropping_sand: None,
             bounds,
+            floor,
         }
     }
 
@@ -63,7 +65,7 @@ impl Grid {
         for y in min.y..=max.y {
             for x in min.x..=max.x {
                 let coord: Coord = (x, y).into();
-                let d = self.data.get(&coord);
+                let d = self.get_coord(&coord);
                 let ch = if d == Some(&Cell::Rock) {
                     ROCK
                 } else if d == Some(&Cell::Sand) || self.dropping_sand.as_ref() == Some(&coord) {
@@ -79,10 +81,21 @@ impl Grid {
         }
     }
 
+    fn get_coord(&self, coord: &Coord) -> Option<&Cell> {
+        let floor_y = self.bounds.1.y + 2;
+        self.data.get(coord).or({
+            if coord.y == floor_y {
+                Some(&Cell::Rock)
+            } else {
+                None
+            }
+        })
+    }
+
     fn next_dropping_sand_position(&self, sand: &Coord) -> Coord {
-        let bottom = self.data.get(&sand.offset_xy(0, 1));
-        let bottom_left = self.data.get(&sand.offset_xy(-1, 1));
-        let bottom_right = self.data.get(&sand.offset_xy(1, 1));
+        let bottom = self.get_coord(&sand.offset_xy(0, 1));
+        let bottom_left = self.get_coord(&sand.offset_xy(-1, 1));
+        let bottom_right = self.get_coord(&sand.offset_xy(1, 1));
         match (bottom_left, bottom, bottom_right) {
             (_, None, _) => sand.offset_xy(0, 1),
             (None, Some(_), _) => sand.offset_xy(-1, 1),
@@ -92,14 +105,14 @@ impl Grid {
     }
 
     fn reset_dropping_sand(&mut self) {
-        self.dropping_sand = Some(SAND_SOURCE_POINT.offset_xy(0, 1));
+        self.dropping_sand = Some(SAND_SOURCE_POINT);
     }
 
     pub fn step(&mut self) -> bool {
         match self.dropping_sand {
             Some(s) => {
                 let next_sand_pos = self.next_dropping_sand_position(&s);
-                if self.coord_out_of_bounds(&next_sand_pos) {
+                if !self.floor && self.coord_out_of_bounds(&next_sand_pos) {
                     return false;
                 }
 
@@ -113,6 +126,10 @@ impl Grid {
             None => {
                 self.reset_dropping_sand();
             }
+        }
+
+        if self.floor && self.data.get(&SAND_SOURCE_POINT).is_some() {
+            return false;
         }
 
         true
@@ -218,8 +235,8 @@ fn parse_all_paths(i: &str) -> IResult<&str, Vec<Path>> {
     separated_list1(tag("\n"), parse_path)(i)
 }
 
-fn day14(input: &str) -> usize {
-    let mut grid = Grid::from_rock_paths(input);
+fn day14(input: &str, floor: bool) -> usize {
+    let mut grid = Grid::from_rock_paths(input, floor);
     loop {
         if !grid.step() {
             break;
@@ -239,13 +256,29 @@ mod tests {
 503,4 -> 502,4 -> 502,9 -> 494,9"
             .trim_start();
 
-        assert_eq!(day14(input), 24);
+        assert_eq!(day14(input, false), 24);
     }
 
     #[test]
     fn day14_test() {
         let input = include_str!("../testdata/day14");
-        assert_eq!(day14(input), 610);
+        assert_eq!(day14(input, false), 610);
+    }
+
+    #[test]
+    fn day14_part2_simple_test() {
+        let input = "
+498,4 -> 498,6 -> 496,6
+503,4 -> 502,4 -> 502,9 -> 494,9"
+            .trim_start();
+
+        assert_eq!(day14(input, true), 93);
+    }
+
+    #[test]
+    fn day14_part2_test() {
+        let input = include_str!("../testdata/day14");
+        assert_eq!(day14(input, true), 27194);
     }
 
     #[test]

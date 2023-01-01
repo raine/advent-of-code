@@ -8,13 +8,15 @@ fn main() {
 498,4 -> 498,6 -> 496,6
 503,4 -> 502,4 -> 502,9 -> 494,9"
         .trim_start();
-    let mut grid = Grid::from_rock_paths(input);
+    let mut grid = Grid::from_rock_paths(input, true);
 
     loop {
         grid.draw();
-        grid.step();
+        if !grid.step() {
+            break;
+        }
 
-        thread::sleep(Duration::from_millis(50));
+        thread::sleep(Duration::from_millis(10));
         print!("{}{}", clear::All, style::Reset);
     }
 }

@@ -21,7 +21,7 @@ struct Point {
 
 impl Point {
     fn taxicab_distance(&self, p: &Point) -> i64 {
-        i64::abs(self.x - p.x) + i64::abs(self.y - p.y)
+        (self.x.abs_diff(p.x) + self.y.abs_diff(p.y)) as i64
     }
 }
 
@@ -29,18 +29,6 @@ impl Point {
 struct Sensor {
     point: Point,
     closest_beacon: Point,
-}
-
-impl Sensor {
-    fn covered_area_at_y(&self, y: i64) -> impl Iterator<Item = Point> + '_ {
-        let d = self.point.taxicab_distance(&self.closest_beacon);
-        let ys = (self.point.y - d..=self.point.y + d).filter(move |y2| y == *y2);
-        ys.flat_map(move |y| {
-            let n = i64::abs(i64::abs(y - self.point.y) - d);
-            let xs = self.point.x - n..=self.point.x + n;
-            xs.map(move |x| Point { x, y })
-        })
-    }
 }
 
 fn parse_point(i: &str) -> IResult<&str, Point> {
@@ -82,12 +70,84 @@ fn day15(i: &str, y: i64) -> usize {
         .map(|s| s.closest_beacon)
         .collect::<HashSet<_>>();
 
-    sensors
+    let mut ranges = vec![];
+    for s in sensors {
+        let radius = s.point.taxicab_distance(&s.closest_beacon);
+        let dist_from_y = s.point.y.abs_diff(y) as i64;
+        if dist_from_y > radius {
+            continue;
+        }
+        let n = i64::abs(dist_from_y - radius);
+        let xs = s.point.x - n..=s.point.x + n;
+        ranges.push(xs);
+    }
+
+    ranges.sort_by_key(|r| *r.start());
+    ranges
+        .into_iter()
+        .coalesce(|prev, curr| {
+            if curr.start() - 1 <= *prev.end() {
+                if curr.end() > prev.end() {
+                    Ok(*prev.start()..=*curr.end())
+                } else {
+                    Ok(prev)
+                }
+            } else {
+                Err((prev, curr))
+            }
+        })
+        .map(|r| {
+            let range_size = (r.end() - r.start() + 1) as usize;
+            let beacons_in_range = beacons
+                .iter()
+                .filter(|b| r.contains(&b.x) && b.y == y)
+                .count();
+            range_size - beacons_in_range
+        })
+        .sum()
+}
+
+// Couldn't have solved this without the range idea from
+// https://fasterthanli.me/series/advent-of-code-2022/part-15
+fn day15_part2(i: &str, max_xy: i64) -> i64 {
+    let sensors = parse_all_sensors(i).finish().unwrap().1;
+    let beacons = sensors
         .iter()
-        .flat_map(|s| s.covered_area_at_y(y))
-        .filter(|p| !beacons.contains(p))
-        .unique()
-        .count()
+        .map(|s| s.closest_beacon)
+        .collect::<HashSet<_>>();
+
+    for y in 0..=max_xy {
+        let mut ranges = vec![];
+        for s in &sensors {
+            let radius = s.point.taxicab_distance(&s.closest_beacon);
+            let dist_from_y = s.point.y.abs_diff(y) as i64;
+            if dist_from_y > radius {
+                continue;
+            }
+            let n = i64::abs(dist_from_y - radius);
+            let xs = (s.point.x - n).max(0)..=(s.point.x + n).min(max_xy);
+            ranges.push(xs);
+        }
+        ranges.sort_by_key(|r| *r.start());
+        for r in ranges.into_iter().coalesce(|prev, curr| {
+            if curr.start() - 1 <= *prev.end() {
+                if curr.end() > prev.end() {
+                    Ok(*prev.start()..=*curr.end())
+                } else {
+                    Ok(prev)
+                }
+            } else {
+                Err((prev, curr))
+            }
+        }) {
+            let range_size = r.end() - r.start() + 1;
+            if range_size != max_xy + 1 {
+                return range_size * 4000000 + y;
+            }
+        }
+    }
+
+    panic!("no solution")
 }
 
 #[cfg(test)]
@@ -101,10 +161,21 @@ mod tests {
     }
 
     #[test]
-    #[ignore]
     fn day15_test() {
         let input = include_str!("../testdata/day15");
-        assert_eq!(day15(input, 2000000), 1);
+        assert_eq!(day15(input, 2000000), 5870800);
+    }
+
+    #[test]
+    fn day15_part2_simple_test() {
+        let input = include_str!("../testdata/day15_simple");
+        assert_eq!(day15_part2(input, 20), 56000011);
+    }
+
+    #[test]
+    fn day15_part2_test() {
+        let input = include_str!("../testdata/day15");
+        assert_eq!(day15_part2(input, 4000000), 10908230916597);
     }
 
     #[test]
@@ -122,23 +193,6 @@ mod tests {
                 point: Point { x: 2, y: 18 },
                 closest_beacon: Point { x: -2, y: 15 }
             }
-        );
-    }
-
-    #[test]
-    fn sensor_covered_area_test() {
-        let sensor = Sensor {
-            point: Point { x: 0, y: 0 },
-            closest_beacon: Point { x: 1, y: 2 },
-        };
-
-        assert_eq!(
-            sensor.covered_area_at_y(2).collect::<Vec<_>>(),
-            vec![
-                Point { x: -1, y: 2 },
-                Point { x: 0, y: 2 },
-                Point { x: 1, y: 2 }
-            ]
         );
     }
 }
